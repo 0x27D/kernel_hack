@@ -1,0 +1,55 @@
+name: Build Linux Kernel
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          libncurses-dev \
+          flex \
+          bison \
+          libssl-dev \
+          libelf-dev \
+          bc \
+          git
+    
+    - name: Configure kernel
+      run: |
+        # Sử dụng config hiện có hoặc tạo config mới
+        if [ -f ".config" ]; then
+          echo "Using existing .config"
+        else
+          make defconfig
+        fi
+        make olddefconfig
+    
+    - name: Build kernel
+      run: |
+        make -j$(nproc)
+    
+    - name: Build modules
+      run: |
+        make modules -j$(nproc)
+    
+    - name: Upload kernel image
+      uses: actions/upload-artifact@v4
+      with:
+        name: kernel-build
+        path: |
+          arch/x86/boot/bzImage
+          vmlinux
+        retention-days: 7
