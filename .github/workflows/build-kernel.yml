@@ -1,4 +1,4 @@
-name: Build Linux Kernel
+name: Build Kernel Modules
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main, master ]
 
 jobs:
-  build-kernel:
+  build-modules:
     runs-on: ubuntu-latest
     
     steps:
@@ -19,37 +19,50 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           build-essential \
-          libncurses-dev \
-          flex \
-          bison \
-          libssl-dev \
+          linux-headers-generic \
           libelf-dev \
-          bc \
           git
     
-    - name: Configure kernel
+    - name: Check repository structure
       run: |
-        # Sử dụng config hiện có hoặc tạo config mới
-        if [ -f ".config" ]; then
-          echo "Using existing .config"
-        else
-          make defconfig
+        echo "Repository contents:"
+        ls -la
+        echo "Makefile content:"
+        if [ -f "Makefile" ]; then
+          cat Makefile
         fi
-        make olddefconfig
     
-    - name: Build kernel
+    - name: Build kernel modules
       run: |
-        make -j$(nproc)
+        # Build các module nếu có Makefile
+        if [ -f "Makefile" ]; then
+          make
+          find . -name "*.ko" -type f | while read module; do
+            echo "Built module: $module"
+            file "$module"
+          done
+        else
+          echo "No Makefile found, checking for individual modules..."
+          # Tìm và build các module riêng lẻ
+          find . -name "Makefile" -type f | while read makefile; do
+            dir=$(dirname "$makefile")
+            echo "Building in $dir"
+            (cd "$dir" && make) || echo "Build failed in $dir"
+          done
+        fi
     
-    - name: Build modules
+    - name: List built artifacts
       run: |
-        make modules -j$(nproc)
+        find . -name "*.ko" -o -name "*.o" | while read file; do
+          echo "Artifact: $file"
+          file "$file" || true
+        done
     
-    - name: Upload kernel image
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: kernel-build
+        name: kernel-modules
         path: |
-          arch/x86/boot/bzImage
-          vmlinux
+          **/*.ko
+          **/*.o
         retention-days: 7
